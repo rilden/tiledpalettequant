@@ -61,10 +61,8 @@ function quantizeImage(imageData, quantizationOptions) {
         data: new Uint8ClampedArray(imageData.data.length),
     };
     for (let i = 0; i < imageData.data.length; i++) {
-        if (i % 4 != 3) {
-            reducedImageData.data[i] = toNbit(quantizationOptions.bitsPerChannel, imageData.data[i]);
-        }
-    }
+       reducedImageData.data[i] = toNbit(quantizationOptions.bitsPerChannel, imageData.data[i]);
+   }
     const tiles = extractTiles(reducedImageData, quantizationOptions);
     let avgPixelsPerTile = 0;
     for (const tile of tiles) {
