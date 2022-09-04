@@ -1,0 +1,12 @@
+img {
+  image-rendering: pixelated;
+}
+
+canvas {
+  image-rendering: pixelated;
+}
+
+body {
+  background-color: rgb(144, 144, 144);
+  padding-bottom: 100vh;
+}

@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:;base64,iVBORw0KGgo=">
+  <link rel="stylesheet" href="style.css">
+  <title>Tile Palette Quantization</title>
+</head>
+
+<body id="body">
+  <img id="source_img" src="carina-nebula.png" alt="source image">
+  <div>
+    <table>
+      <tr>
+        <td><label for="image_selector">Input image:</label></td>
+        <td><input type="file" id="image_selector" accept="image/*"></td>
+      </tr>
+      <tr>
+        <td><label for="tile_width">Tile width</label></td>
+        <td><input type="number" id="tile_width" min="1" max="32" step="1" value="8"></td>
+      </tr>
+      <tr>
+        <td><label for="tile_height">Tile height</label></td>
+        <td><input type="number" id="tile_height" min="1" max="32" step="1" value="8"></td>
+      </tr>
+      <tr>
+        <td><label for="palette_num">Palettes:</label></td>
+        <td><input type="number" id="palette_num" min="1" max="16" step="1" value="8"></td>
+      </tr>
+      <tr>
+        <td><label for="colors_per_palette">Colors per palette:</label></td>
+        <td><input type="number" id="colors_per_palette" min="2" max="16" step="1" value="4"></td>
+      </tr>
+      <tr>
+        <td><label for="bits_per_channel">Bits per channel:</label></td>
+        <td><input type="number" id="bits_per_channel" min="2" max="8" step="1" value="5"></td>
+      </tr>
+      <tr>
+        <td><label for="fraction_of_pixels">Fraction of pixels:</label></td>
+        <td><input type="number" id="fraction_of_pixels" min="0.01" max="10" step="any" value="0.1"></td>
+      </tr>
+    </table>
+    <fieldset>
+      <legend>Color index zero behaviour:</legend>
+      <table>
+        <tr>
+          <td>
+            <input type="radio" id="unique" name="color_zero" value="unique" checked>
+            <label for="unique">Unique</label>
+          </td>
+        </tr>
+        <tr>
+          <td>
+            <input type="radio" id="shared" name="color_zero" value="shared">
+            <label for="shared">Shared color:</label>
+            <input type="color" id="shared_color" value="#000000" aria-label="shared color">
+          </td>
+        </tr>
+        <tr>
+          <td>
+            <input type="radio" id="transparent_from_transparent" name="color_zero" value="transparent_from_transparent">
+            <label for="transparent_from_transparent">Transparent, from transparent pixels</label>
+          </td>
+        </tr>
+        <tr>
+          <td>
+            <input type="radio" id="transparent_from_color" name="color_zero" value="transparent_from_color">
+            <label for="transparent_from_color"><label for="transparent_color">Transparent color:</label></label>
+            <input type="color" id="transparent_color" value="#ff00ff" aria-label="transparent color">
+          </td>
+        </tr>
+      </table>
+    </fieldset>
+  </div>
+  <div>
+    <button type="button" id="quantizeButton">Quantize</button>
+    <progress id="progress" max="100" value="0"></progress>
+  </div>
+  <div id="quantized_images">
+  </div>
+  <script type="module" src="script.js"></script>
+</body>
+</html>
