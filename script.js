@@ -1,4 +1,4 @@
-import { Action, ColorZeroBehaviour } from "./enums.js";
+import { Action, ColorZeroBehaviour, Dither, DitherPattern } from "./enums.js";
 const body = document.getElementById("body");
 const imageSelector = document.getElementById("image_selector");
 const tileWidthInput = document.getElementById("tile_width");
@@ -9,16 +9,28 @@ const bitsPerChannelInput = document.getElementById("bits_per_channel");
 const fractionOfPixelsInput = document.getElementById("fraction_of_pixels");
 const numberInputs = [tileWidthInput, tileHeightInput, numPalettesInput, colorsPerPaletteInput, bitsPerChannelInput];
 const defaultNumberInputs = [8, 8, 8, 4, 5];
+const reduceColorBandingInput = document.getElementById("reduce_color_banding");
 const uniqueInput = document.getElementById("unique");
 const sharedInput = document.getElementById("shared");
 const transparentFromTransparentInput = document.getElementById("transparent_from_transparent");
 const transparentFromColorInput = document.getElementById("transparent_from_color");
-const radioButtons = [uniqueInput, sharedInput, transparentFromTransparentInput, transparentFromColorInput];
-const radioValues = [ColorZeroBehaviour.Unique, ColorZeroBehaviour.Shared, ColorZeroBehaviour.TransparentFromTransparent, ColorZeroBehaviour.TransparentFromColor];
+const indexZeroButtons = [uniqueInput, sharedInput, transparentFromTransparentInput, transparentFromColorInput];
+const indexZeroValues = [ColorZeroBehaviour.Unique, ColorZeroBehaviour.Shared, ColorZeroBehaviour.TransparentFromTransparent, ColorZeroBehaviour.TransparentFromColor];
 const colorZeroStrings = ["u", "s", "t", "tc"];
 const sharedColorInput = document.getElementById("shared_color");
 const transparentColorInput = document.getElementById("transparent_color");
 const colorValues = [null, sharedColorInput, transparentColorInput, transparentColorInput];
+const ditherOffInput = document.getElementById("dither_off");
+const ditherFastInput = document.getElementById("dither_fast");
+const ditherSlowInput = document.getElementById("dither_slow");
+const ditherButtons = [ditherOffInput, ditherFastInput, ditherSlowInput];
+const ditherValues = [Dither.Off, Dither.Fast, Dither.Slow];
+const ditherWeightInput = document.getElementById("dither_weight");
+const ditherDiagonalInput = document.getElementById("dither_diagonal");
+const ditherHorizontalInput = document.getElementById("dither_horizontal");
+const ditherVerticalInput = document.getElementById("dither_vertical");
+const ditherPatternButtons = [ditherDiagonalInput, ditherHorizontalInput, ditherVerticalInput];
+const ditherPatternValues = [DitherPattern.Diagonal, DitherPattern.Horizontal, DitherPattern.Vertical];
 const quantizeButton = document.getElementById("quantizeButton");
 const progress = document.getElementById("progress");
 const quantizedImages = document.getElementById("quantized_images");
@@ -96,9 +108,9 @@ quantizeButton.addEventListener("click", event => {
     let colorZeroBehaviour = ColorZeroBehaviour.Unique;
     let colorZeroValue = null;
     let colorZeroStr = "";
-    for (let i = 0; i < radioButtons.length; i++) {
-        if (radioButtons[i].checked) {
-            colorZeroBehaviour = radioValues[i];
+    for (let i = 0; i < indexZeroButtons.length; i++) {
+        if (indexZeroButtons[i].checked) {
+            colorZeroBehaviour = indexZeroValues[i];
             colorZeroStr = colorZeroStrings[i];
             if (colorValues[i]) {
                 const colorStr = colorValues[i].value;
@@ -109,6 +121,23 @@ quantizeButton.addEventListener("click", event => {
                 ];
             }
             break;
+        }
+    }
+    let dither = Dither.Off;
+    for (let i = 0; i < ditherButtons.length; i++) {
+        if (ditherButtons[i].checked) {
+            dither = ditherValues[i];
+        }
+    }
+    let ditherWeight = parseFloat(ditherWeightInput.value);
+    if (isNaN(ditherWeight)) {
+        ditherWeight = 1;
+        ditherWeightInput.value = "1";
+    }
+    let ditherPattern = DitherPattern.Diagonal;
+    for (let i = 0; i < ditherPatternButtons.length; i++) {
+        if (ditherPatternButtons[i].checked) {
+            ditherPattern = ditherPatternValues[i];
         }
     }
     const settingsStr = `-${tileWidthInput.value}x${tileHeightInput.value}-${numPalettesInput.value}p${colorsPerPaletteInput.value}c-${colorZeroStr}`;
@@ -167,6 +196,9 @@ quantizeButton.addEventListener("click", event => {
             fractionOfPixels: pixelFraction,
             colorZeroBehaviour: colorZeroBehaviour,
             colorZeroValue: colorZeroValue,
+            dither: dither,
+            ditherWeight: ditherWeight,
+            ditherPattern: ditherPattern,
         }
     });
 });
