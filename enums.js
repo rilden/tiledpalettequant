@@ -22,7 +22,10 @@ export var Dither;
 })(Dither || (Dither = {}));
 export var DitherPattern;
 (function (DitherPattern) {
-    DitherPattern[DitherPattern["Diagonal"] = 0] = "Diagonal";
-    DitherPattern[DitherPattern["Horizontal"] = 1] = "Horizontal";
-    DitherPattern[DitherPattern["Vertical"] = 2] = "Vertical";
+    DitherPattern[DitherPattern["Diagonal4"] = 0] = "Diagonal4";
+    DitherPattern[DitherPattern["Horizontal4"] = 1] = "Horizontal4";
+    DitherPattern[DitherPattern["Vertical4"] = 2] = "Vertical4";
+    DitherPattern[DitherPattern["Diagonal2"] = 3] = "Diagonal2";
+    DitherPattern[DitherPattern["Horizontal2"] = 4] = "Horizontal2";
+    DitherPattern[DitherPattern["Vertical2"] = 5] = "Vertical2";
 })(DitherPattern || (DitherPattern = {}));

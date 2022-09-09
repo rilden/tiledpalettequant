@@ -9,7 +9,6 @@ const bitsPerChannelInput = document.getElementById("bits_per_channel");
 const fractionOfPixelsInput = document.getElementById("fraction_of_pixels");
 const numberInputs = [tileWidthInput, tileHeightInput, numPalettesInput, colorsPerPaletteInput, bitsPerChannelInput];
 const defaultNumberInputs = [8, 8, 8, 4, 5];
-const reduceColorBandingInput = document.getElementById("reduce_color_banding");
 const uniqueInput = document.getElementById("unique");
 const sharedInput = document.getElementById("shared");
 const transparentFromTransparentInput = document.getElementById("transparent_from_transparent");
@@ -26,11 +25,16 @@ const ditherSlowInput = document.getElementById("dither_slow");
 const ditherButtons = [ditherOffInput, ditherFastInput, ditherSlowInput];
 const ditherValues = [Dither.Off, Dither.Fast, Dither.Slow];
 const ditherWeightInput = document.getElementById("dither_weight");
-const ditherDiagonalInput = document.getElementById("dither_diagonal");
-const ditherHorizontalInput = document.getElementById("dither_horizontal");
-const ditherVerticalInput = document.getElementById("dither_vertical");
-const ditherPatternButtons = [ditherDiagonalInput, ditherHorizontalInput, ditherVerticalInput];
-const ditherPatternValues = [DitherPattern.Diagonal, DitherPattern.Horizontal, DitherPattern.Vertical];
+const ditherDiagonal4Input = document.getElementById("dither_diagonal4");
+const ditherHorizontal4Input = document.getElementById("dither_horizontal4");
+const ditherVertical4Input = document.getElementById("dither_vertical4");
+const ditherDiagonal2Input = document.getElementById("dither_diagonal2");
+const ditherHorizontal2Input = document.getElementById("dither_horizontal2");
+const ditherVertical2Input = document.getElementById("dither_vertical2");
+const ditherPatternButtons = [ditherDiagonal4Input, ditherHorizontal4Input, ditherVertical4Input,
+    ditherDiagonal2Input, ditherHorizontal2Input, ditherVertical2Input];
+const ditherPatternValues = [DitherPattern.Diagonal4, DitherPattern.Horizontal4, DitherPattern.Vertical4,
+    DitherPattern.Diagonal2, DitherPattern.Horizontal2, DitherPattern.Vertical2];
 const quantizeButton = document.getElementById("quantizeButton");
 const progress = document.getElementById("progress");
 const quantizedImages = document.getElementById("quantized_images");
@@ -134,7 +138,7 @@ quantizeButton.addEventListener("click", event => {
         ditherWeight = 1;
         ditherWeightInput.value = "1";
     }
-    let ditherPattern = DitherPattern.Diagonal;
+    let ditherPattern = DitherPattern.Diagonal4;
     for (let i = 0; i < ditherPatternButtons.length; i++) {
         if (ditherPatternButtons[i].checked) {
             ditherPattern = ditherPatternValues[i];

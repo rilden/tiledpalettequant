@@ -22,25 +22,43 @@ var Dither;
 })(Dither || (Dither = {}));
 var DitherPattern;
 (function (DitherPattern) {
-    DitherPattern[DitherPattern["Diagonal"] = 0] = "Diagonal";
-    DitherPattern[DitherPattern["Horizontal"] = 1] = "Horizontal";
-    DitherPattern[DitherPattern["Vertical"] = 2] = "Vertical";
+    DitherPattern[DitherPattern["Diagonal4"] = 0] = "Diagonal4";
+    DitherPattern[DitherPattern["Horizontal4"] = 1] = "Horizontal4";
+    DitherPattern[DitherPattern["Vertical4"] = 2] = "Vertical4";
+    DitherPattern[DitherPattern["Diagonal2"] = 3] = "Diagonal2";
+    DitherPattern[DitherPattern["Horizontal2"] = 4] = "Horizontal2";
+    DitherPattern[DitherPattern["Vertical2"] = 5] = "Vertical2";
 })(DitherPattern || (DitherPattern = {}));
-const ditherPatternDiagonal = [[0, 2], [3, 1]];
-const ditherPatternHorizontal = [[0, 3], [1, 2]];
-const ditherPatternVertical = [[0, 1], [3, 2]];
+const ditherPatternDiagonal4 = [[0, 2], [3, 1]];
+const ditherPatternHorizontal4 = [[0, 3], [1, 2]];
+const ditherPatternVertical4 = [[0, 1], [3, 2]];
+const ditherPatternDiagonal2 = [[0, 1], [1, 0]];
+const ditherPatternHorizontal2 = [[0, 1], [0, 1]];
+const ditherPatternVertical2 = [[0, 0], [1, 1]];
 let quantizationOptions = null;
 let ditherPattern = null;
+let ditherPixels = 4;
 onmessage = function (event) {
     updateProgress(0);
     const data = event.data;
     quantizationOptions = data.quantizationOptions;
-    if (quantizationOptions.ditherPattern === DitherPattern.Diagonal)
-        ditherPattern = ditherPatternDiagonal;
-    if (quantizationOptions.ditherPattern === DitherPattern.Horizontal)
-        ditherPattern = ditherPatternHorizontal;
-    if (quantizationOptions.ditherPattern === DitherPattern.Vertical)
-        ditherPattern = ditherPatternVertical;
+    if (quantizationOptions.ditherPattern === DitherPattern.Diagonal4)
+        ditherPattern = ditherPatternDiagonal4;
+    if (quantizationOptions.ditherPattern === DitherPattern.Horizontal4)
+        ditherPattern = ditherPatternHorizontal4;
+    if (quantizationOptions.ditherPattern === DitherPattern.Vertical4)
+        ditherPattern = ditherPatternVertical4;
+    if (quantizationOptions.ditherPattern === DitherPattern.Diagonal2)
+        ditherPattern = ditherPatternDiagonal2;
+    if (quantizationOptions.ditherPattern === DitherPattern.Horizontal2)
+        ditherPattern = ditherPatternHorizontal2;
+    if (quantizationOptions.ditherPattern === DitherPattern.Vertical2)
+        ditherPattern = ditherPatternVertical2;
+    if (quantizationOptions.ditherPattern === DitherPattern.Diagonal2 ||
+        quantizationOptions.ditherPattern === DitherPattern.Horizontal2 ||
+        quantizationOptions.ditherPattern === DitherPattern.Vertical2) {
+        ditherPixels = 2;
+    }
     quantizeImage(data.imageData);
     updateProgress(100);
     postMessage({ action: Action.DoneQuantization });
@@ -665,7 +683,7 @@ function closestColorDither(palette, pixel) {
     const linearPixel = cloneColor(pixel.color);
     toLinearColor(linearPixel);
     const candidates = [];
-    for (let i = 0; i < 4; i++) {
+    for (let i = 0; i < ditherPixels; i++) {
         const c = cloneColor(linearPixel);
         const err = cloneColor(error);
         scaleColor(err, quantizationOptions.ditherWeight);
@@ -681,8 +699,8 @@ function closestColorDither(palette, pixel) {
         addColor(error, linearPixel);
         subtractColor(error, reducedColor);
     }
-    for (let i = 0; i < 3; i++) {
-        for (let j = i + 1; j < 4; j++) {
+    for (let i = 0; i < ditherPixels - 1; i++) {
+        for (let j = i + 1; j < ditherPixels; j++) {
             if (candidates[i].brightness > candidates[j].brightness) {
                 [candidates[i], candidates[j]] = [candidates[j], candidates[i]];
             }
