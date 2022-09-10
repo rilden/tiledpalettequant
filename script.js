@@ -135,8 +135,8 @@ quantizeButton.addEventListener("click", event => {
     }
     let ditherWeight = parseFloat(ditherWeightInput.value);
     if (isNaN(ditherWeight)) {
-        ditherWeight = 1;
-        ditherWeightInput.value = "1";
+        ditherWeight = 0.5;
+        ditherWeightInput.value = "0.5";
     }
     let ditherPattern = DitherPattern.Diagonal4;
     for (let i = 0; i < ditherPatternButtons.length; i++) {
