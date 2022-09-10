@@ -456,13 +456,7 @@ function reverse(a, left, right) {
     }
 }
 function toLinear(x) {
-    x /= 255;
-    if (x <= 0.04045) {
-        return x / 12.92;
-    }
-    else {
-        return Math.pow(((x + 0.055) / 1.055), 2.4);
-    }
+    return x * x;
 }
 function toLinearColor(color) {
     for (let i = 0; i < color.length; i++) {
@@ -470,14 +464,7 @@ function toLinearColor(color) {
     }
 }
 function toSrgb(x) {
-    let result = 0;
-    if (x > 0.0031308) {
-        result = 1.055 * Math.pow(x, 1 / 2.4) - 0.055;
-    }
-    else {
-        result = 12.92 * x;
-    }
-    return 255 * result;
+    return Math.sqrt(x);
 }
 function toSrgbColor(color) {
     for (let i = 0; i < color.length; i++) {
@@ -696,17 +683,20 @@ function closestColorDither(palette, pixel) {
     const linearPixel = cloneColor(pixel.color);
     toLinearColor(linearPixel);
     const candidates = [];
+    let c = [0, 0, 0];
+    let err = [0, 0, 0];
+    let reducedColor = [0, 0, 0];
     for (let i = 0; i < ditherPixels; i++) {
-        const c = cloneColor(linearPixel);
-        const err = cloneColor(error);
+        copyColor(c, linearPixel);
+        copyColor(err, error);
         scaleColor(err, quantizationOptions.ditherWeight);
         addColor(c, err);
+        clampColor(c, 0, 255 * 255);
         toSrgbColor(c);
-        clampColor(c, 0, 255);
         const [minColorIndex, minDist] = closestColor(palette, c);
         const minColor = palette[minColorIndex];
         candidates.push({ colorIndex: minColorIndex, colorDistance: minDist, comparedColor: c, brightness: brightness(minColor) });
-        const reducedColor = cloneColor(minColor);
+        copyColor(reducedColor, minColor);
         toNbitColor(reducedColor, quantizationOptions.bitsPerChannel);
         toLinearColor(reducedColor);
         addColor(error, linearPixel);
@@ -740,7 +730,7 @@ function paletteDistance(palette, tile) {
 function paletteDistanceDither(palette, tile) {
     let sum = 0;
     for (let pixel of tile.pixels) {
-        const [, minDist, comparedColor] = closestColorDither(palette, pixel);
+        const [, minDist,] = closestColorDither(palette, pixel);
         sum += minDist;
     }
     return sum;
@@ -985,6 +975,11 @@ function cloneColor(color) {
     }
     return result;
 }
+function copyColor(dest, source) {
+    for (let i = 0; i < 3; i++) {
+        dest[i] = source[i];
+    }
+}
 function addColor(c1, c2) {
     for (let i = 0; i < 3; i++) {
         c1[i] += c2[i];
@@ -1010,8 +1005,10 @@ function clampColor(color, minValue, maxValue) {
         }
     }
 }
+// alpha = 255 / (2 ** n - 1)
+const alphaValues = [0, 255, 85, 36.42857, 17, 8.22581, 4.04762, 2.00787, 1];
 function toNbit(value, n) {
-    const alpha = 255 / (Math.pow(2, n) - 1);
+    const alpha = alphaValues[n];
     return Math.round(Math.round(value / alpha) * alpha);
 }
 function toNbitColor(color, n) {
