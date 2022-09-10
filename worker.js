@@ -76,7 +76,7 @@ function updatePalettes(palettes, doSorting) {
     if (colorZeroBehaviour === ColorZeroBehaviour.TransparentFromColor || colorZeroBehaviour === ColorZeroBehaviour.TransparentFromTransparent) {
         startIndex = 1;
         for (const palette of pal) {
-            palette.unshift(structuredClone(quantizationOptions.colorZeroValue));
+            palette.unshift(cloneColor(quantizationOptions.colorZeroValue));
         }
     }
     if (colorZeroBehaviour === ColorZeroBehaviour.Shared) {
@@ -144,8 +144,10 @@ function quantizeImage(image) {
     const pixels = extractPixels(tiles);
     const randomShuffle = new RandomShuffle(pixels.length);
     let iterations = quantizationOptions.fractionOfPixels * pixels.length;
+    let meanSquareErr = meanSquareError;
     if (quantizationOptions.dither === Dither.Slow) {
-        iterations /= 10;
+        iterations /= 5;
+        meanSquareErr = meanSquareErrorDither;
     }
     const showProgress = true;
     const alpha = 0.3;
@@ -193,7 +195,7 @@ function quantizeImage(image) {
         if (showProgress)
             updateQuantizedImage(quantizeTiles(palettes, reducedImageData, false));
     }
-    let minMse = meanSquareError(palettes, tiles);
+    let minMse = meanSquareErr(palettes, tiles);
     let minPalettes = structuredClone(palettes);
     for (let i = 0; i < replaceIterations; i++) {
         palettes = replaceWeakestColors(palettes, tiles, minColorFactor, minPaletteFactor, true);
@@ -201,7 +203,7 @@ function quantizeImage(image) {
             const nextPixel = pixels[randomShuffle.next()];
             movePalettesCloser(palettes, nextPixel, alpha);
         }
-        const mse = meanSquareError(palettes, tiles);
+        const mse = meanSquareErr(palettes, tiles);
         if (mse < minMse) {
             minMse = mse;
             minPalettes = structuredClone(palettes);
@@ -254,10 +256,8 @@ function reducePalettes(palettes, bitsPerChannel) {
     for (let palette of palettes) {
         const pal = [];
         for (let color of palette) {
-            const col = [0, 0, 0];
-            for (let i = 0; i < color.length; i++) {
-                col[i] = toNbit(color[i], bitsPerChannel);
-            }
+            const col = cloneColor(color);
+            toNbitColor(col, bitsPerChannel);
             pal.push(col);
         }
         result.push(pal);
@@ -557,10 +557,10 @@ function replaceWeakestColors(palettes, tiles, minColorFactor, minPaletteFactor,
             const colors = [];
             for (let i = 0; i < palettes[palIndex].length; i++) {
                 if (i == minColorIndex && shouldReplaceMinColor) {
-                    colors.push(structuredClone(palettes[palIndex][maxColorIndex]));
+                    colors.push(cloneColor(palettes[palIndex][maxColorIndex]));
                 }
                 else {
-                    colors.push(structuredClone(palettes[palIndex][i]));
+                    colors.push(cloneColor(palettes[palIndex][i]));
                 }
             }
             result.push(colors);
@@ -570,7 +570,7 @@ function replaceWeakestColors(palettes, tiles, minColorFactor, minPaletteFactor,
         for (let palIndex = 0; palIndex < palettes.length; palIndex++) {
             const colors = [];
             for (let i = 0; i < palettes[palIndex].length; i++) {
-                colors.push(structuredClone(palettes[palIndex][i]));
+                colors.push(cloneColor(palettes[palIndex][i]));
             }
             result.push(colors);
         }
@@ -607,7 +607,7 @@ function kMeans(palettes, tiles) {
         for (let i = 0; i < tile.colors.length; i++) {
             const [colIndex,] = closestColor(palettes[palIndex], tile.colors[i]);
             counts[palIndex][colIndex] += tile.counts[i];
-            const color = structuredClone(tile.colors[i]);
+            const color = cloneColor(tile.colors[i]);
             scaleColor(color, tile.counts[i]);
             addColor(sumColors[palIndex][colIndex], color);
         }
@@ -619,7 +619,7 @@ function kMeans(palettes, tiles) {
     for (let i = 0; i < sumColors.length; i++) {
         for (let j = 0; j < sumColors[i].length; j++) {
             if (counts[i][j] == 0 || (j === sharedColorIndex)) {
-                sumColors[i][j] = structuredClone(palettes[i][j]);
+                sumColors[i][j] = cloneColor(palettes[i][j]);
             }
             else {
                 scaleColor(sumColors[i][j], 1.0 / counts[i][j]);
@@ -637,6 +637,19 @@ function meanSquareError(palettes, tiles) {
             const [, minDistance] = closestColor(palettes[palIndex], tile.colors[i]);
             totalDistance += minDistance * tile.counts[i];
             count += tile.counts[i];
+        }
+    }
+    return totalDistance / count;
+}
+function meanSquareErrorDither(palettes, tiles) {
+    let totalDistance = 0;
+    let count = 0;
+    for (const tile of tiles) {
+        const [palIndex,] = closestPaletteDither(palettes, tile);
+        for (const pixel of tile.pixels) {
+            const [, minDistance] = closestColorDither(palettes[palIndex], pixel);
+            totalDistance += minDistance;
+            count += 1;
         }
     }
     return totalDistance / count;
@@ -932,11 +945,11 @@ function colorQuantize1(pixels, randomShuffle) {
     let splitIndex = 0;
     for (let numColors = 2; numColors <= colorsPerPalette; numColors++) {
         if (numColors === 2 && colorZeroBehaviour === ColorZeroBehaviour.Shared) {
-            colors[0] = structuredClone(quantizationOptions.colorZeroValue);
+            colors[0] = cloneColor(quantizationOptions.colorZeroValue);
             colors.push(avgColor);
         }
         else {
-            colors.push(structuredClone(colors[splitIndex]));
+            colors.push(cloneColor(colors[splitIndex]));
         }
         const totalColorDistance = new Array(numColors);
         for (let i = 0; i < numColors; i++) {
@@ -999,7 +1012,7 @@ function clampColor(color, minValue, maxValue) {
 }
 function toNbit(value, n) {
     const alpha = 255 / (Math.pow(2, n) - 1);
-    return Math.round(value / alpha) * alpha;
+    return Math.round(Math.round(value / alpha) * alpha);
 }
 function toNbitColor(color, n) {
     for (let i = 0; i < 3; i++) {
