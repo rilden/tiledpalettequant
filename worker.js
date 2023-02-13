@@ -1,3 +1,4 @@
+"use strict";
 // we can't import these enums from enums.js, because worker modules are not supported in Firefox
 var Action;
 (function (Action) {
@@ -29,14 +30,44 @@ var DitherPattern;
     DitherPattern[DitherPattern["Horizontal2"] = 4] = "Horizontal2";
     DitherPattern[DitherPattern["Vertical2"] = 5] = "Vertical2";
 })(DitherPattern || (DitherPattern = {}));
-const ditherPatternDiagonal4 = [[0, 2], [3, 1]];
-const ditherPatternHorizontal4 = [[0, 3], [1, 2]];
-const ditherPatternVertical4 = [[0, 1], [3, 2]];
-const ditherPatternDiagonal2 = [[0, 1], [1, 0]];
-const ditherPatternHorizontal2 = [[0, 1], [0, 1]];
-const ditherPatternVertical2 = [[0, 0], [1, 1]];
-let quantizationOptions = null;
-let ditherPattern = null;
+const ditherPatternDiagonal4 = [
+    [0, 2],
+    [3, 1],
+];
+const ditherPatternHorizontal4 = [
+    [0, 3],
+    [1, 2],
+];
+const ditherPatternVertical4 = [
+    [0, 1],
+    [3, 2],
+];
+const ditherPatternDiagonal2 = [
+    [0, 1],
+    [1, 0],
+];
+const ditherPatternHorizontal2 = [
+    [0, 1],
+    [0, 1],
+];
+const ditherPatternVertical2 = [
+    [0, 0],
+    [1, 1],
+];
+let quantizationOptions = {
+    tileWidth: 8,
+    tileHeight: 8,
+    numPalettes: 8,
+    colorsPerPalette: 4,
+    bitsPerChannel: 5,
+    fractionOfPixels: 0.1,
+    colorZeroBehaviour: ColorZeroBehaviour.Unique,
+    colorZeroValue: [0, 0, 0],
+    dither: Dither.Off,
+    ditherWeight: 0.5,
+    ditherPattern: DitherPattern.Diagonal4,
+};
+let ditherPattern = ditherPatternDiagonal4;
 let ditherPixels = 4;
 onmessage = function (event) {
     updateProgress(0);
@@ -64,16 +95,17 @@ onmessage = function (event) {
     postMessage({ action: Action.DoneQuantization });
 };
 function updateProgress(progress) {
-    postMessage({ action: Action.UpdateProgress, progress: progress, });
+    postMessage({ action: Action.UpdateProgress, progress: progress });
 }
 function updateQuantizedImage(image) {
-    postMessage({ action: Action.UpdateQuantizedImage, imageData: image, });
+    postMessage({ action: Action.UpdateQuantizedImage, imageData: image });
 }
 function updatePalettes(palettes, doSorting) {
     let pal = structuredClone(palettes);
     const colorZeroBehaviour = quantizationOptions.colorZeroBehaviour;
     let startIndex = 0;
-    if (colorZeroBehaviour === ColorZeroBehaviour.TransparentFromColor || colorZeroBehaviour === ColorZeroBehaviour.TransparentFromTransparent) {
+    if (colorZeroBehaviour === ColorZeroBehaviour.TransparentFromColor ||
+        colorZeroBehaviour === ColorZeroBehaviour.TransparentFromTransparent) {
         startIndex = 1;
         for (const palette of pal) {
             palette.unshift(cloneColor(quantizationOptions.colorZeroValue));
@@ -88,8 +120,8 @@ function updatePalettes(palettes, doSorting) {
     postMessage({
         action: Action.UpdatePalettes,
         palettes: pal,
-        numPalettes: quantizationOptions.palettes,
-        numColors: quantizationOptions.colorsPerPalette
+        numPalettes: quantizationOptions.numPalettes,
+        numColors: quantizationOptions.colorsPerPalette,
     });
 }
 function movePalettesCloser(palettes, pixel, alpha) {
@@ -101,12 +133,12 @@ function movePalettesCloser(palettes, pixel, alpha) {
     let minColorIndex = null;
     let targetColor = null;
     if (quantizationOptions.dither === Dither.Slow) {
-        [minPaletteIndex,] = closestPaletteDither(palettes, pixel.tile);
+        minPaletteIndex = closestPaletteDither(palettes, pixel.tile);
         [minColorIndex, , targetColor] = closestColorDither(palettes[minPaletteIndex], pixel);
     }
     else {
-        [minPaletteIndex,] = closestPalette(palettes, pixel.tile);
-        [minColorIndex,] = closestColor(palettes[minPaletteIndex], pixel.color);
+        minPaletteIndex = closestPalette(palettes, pixel.tile);
+        [minColorIndex] = closestColor(palettes[minPaletteIndex], pixel.color);
         targetColor = pixel.color;
     }
     if (minColorIndex !== sharedColorIndex) {
@@ -132,8 +164,6 @@ function quantizeImage(image) {
             reducedImageData.data[i] = toNbit(image.data[i], quantizationOptions.bitsPerChannel);
         }
     }
-    if (quantizationOptions.dither === Dither.Slow) {
-    }
     const tiles = extractTiles(reducedImageData);
     let avgPixelsPerTile = 0;
     for (const tile of tiles) {
@@ -143,16 +173,18 @@ function quantizeImage(image) {
     console.log("Colors per tile: " + avgPixelsPerTile.toFixed(2));
     const pixels = extractPixels(tiles);
     const randomShuffle = new RandomShuffle(pixels.length);
-    let iterations = quantizationOptions.fractionOfPixels * pixels.length;
-    let meanSquareErr = meanSquareError;
-    if (quantizationOptions.dither === Dither.Slow) {
-        iterations /= 5;
-        meanSquareErr = meanSquareErrorDither;
-    }
     const showProgress = true;
-    const alpha = 0.3;
-    const finalAlpha = 0.05;
-    const minColorFactor = 1;
+    let iterations = quantizationOptions.fractionOfPixels * pixels.length;
+    let alpha = 0.3;
+    let finalAlpha = 0.05;
+    const meanSquareErr = meanSquareError;
+    if (quantizationOptions.dither === Dither.Slow) {
+        // meanSquareErr = meanSquareErrorDither;
+        iterations /= 5;
+        alpha = 0.1;
+        finalAlpha = 0.02;
+    }
+    const minColorFactor = 0.5;
     const minPaletteFactor = 0.5;
     const replaceIterations = 10;
     const replaceInitially = true;
@@ -161,18 +193,14 @@ function quantizeImage(image) {
     if (quantizationOptions.dither != Dither.Off) {
         prog[3] = 94;
     }
-    let sharedColorIndex = null;
-    if (quantizationOptions.colorZeroBehaviour === ColorZeroBehaviour.Shared) {
-        sharedColorIndex = 0;
-    }
     const pal1 = colorQuantize1(pixels, randomShuffle);
-    updateProgress(prog[0] / quantizationOptions.palettes);
+    updateProgress(prog[0] / quantizationOptions.numPalettes);
     let palettes = [structuredClone(pal1)];
     updatePalettes(palettes, false);
     if (showProgress)
         updateQuantizedImage(quantizeTiles(palettes, reducedImageData, false));
     let splitIndex = 0;
-    for (let numPalettes = 2; numPalettes <= quantizationOptions.palettes; numPalettes++) {
+    for (let numPalettes = 2; numPalettes <= quantizationOptions.numPalettes; numPalettes++) {
         if (replaceInitially) {
             palettes = replaceWeakestColors(palettes, tiles, minColorFactor, 0, false);
         }
@@ -181,16 +209,13 @@ function quantizeImage(image) {
             const nextPixel = pixels[randomShuffle.next()];
             movePalettesCloser(palettes, nextPixel, alpha);
         }
-        const paletteDistance = new Array(numPalettes);
-        for (let i = 0; i < numPalettes; i++) {
-            paletteDistance[i] = 0.0;
-        }
-        for (let tile of tiles) {
-            const [palIndex, distance] = closestPalette(palettes, tile);
+        const paletteDistance = zeroArray(numPalettes);
+        for (const tile of tiles) {
+            const [palIndex, distance] = closestPaletteDistance(palettes, tile);
             paletteDistance[palIndex] += distance;
         }
         splitIndex = maxIndex(paletteDistance);
-        updateProgress(prog[0] * numPalettes / quantizationOptions.palettes);
+        updateProgress((prog[0] * numPalettes) / quantizationOptions.numPalettes);
         updatePalettes(palettes, false);
         if (showProgress)
             updateQuantizedImage(quantizeTiles(palettes, reducedImageData, false));
@@ -208,7 +233,7 @@ function quantizeImage(image) {
             minMse = mse;
             minPalettes = structuredClone(palettes);
         }
-        updateProgress(prog[0] + (prog[1] - prog[0]) * (i + 1) / replaceIterations);
+        updateProgress(prog[0] + ((prog[1] - prog[0]) * (i + 1)) / replaceIterations);
         updatePalettes(palettes, false);
         if (showProgress) {
             if (useMin && i === replaceIterations - 1) {
@@ -218,6 +243,8 @@ function quantizeImage(image) {
                 updateQuantizedImage(quantizeTiles(palettes, reducedImageData, false));
             }
         }
+        console.log("MSE: " + mse.toFixed(0));
+        // console.log((performance.now() - t1).toFixed(0) + " ms");
     }
     if (useMin) {
         palettes = minPalettes;
@@ -231,31 +258,33 @@ function quantizeImage(image) {
         movePalettesCloser(palettes, nextPixel, finalAlpha);
         if (iteration >= nextUpdate) {
             nextUpdate += iterations;
-            updateProgress(prog[1] + (prog[2] - prog[1]) * iteration / finalIterations);
+            updateProgress(prog[1] + ((prog[2] - prog[1]) * iteration) / finalIterations);
             updatePalettes(palettes, false);
         }
     }
+    console.log("Normal final: " + meanSquareError(palettes, tiles).toFixed(0));
+    console.log("Dither final: " + meanSquareErrorDither(palettes, tiles).toFixed(0));
     updateProgress(prog[2]);
     updatePalettes(palettes, false);
     if (!useDither) {
         palettes = reducePalettes(palettes, quantizationOptions.bitsPerChannel);
         for (let i = 0; i < 3; i++) {
             palettes = kMeans(palettes, tiles);
-            updateProgress(prog[2] + (prog[3] - prog[2]) * (i + 1) / 3);
+            updateProgress(prog[2] + ((prog[3] - prog[2]) * (i + 1)) / 3);
             updatePalettes(palettes, false);
         }
     }
     palettes = reducePalettes(palettes, quantizationOptions.bitsPerChannel);
-    updateQuantizedImage(quantizeTiles(palettes, reducedImageData, useDither));
     updatePalettes(palettes, true);
+    updateQuantizedImage(quantizeTiles(palettes, reducedImageData, useDither));
     console.log("> MSE: " + meanSquareError(palettes, tiles).toFixed(2));
     console.log(`> Time: ${((performance.now() - t0) / 1000).toFixed(2)} sec`);
 }
 function reducePalettes(palettes, bitsPerChannel) {
     const result = [];
-    for (let palette of palettes) {
+    for (const palette of palettes) {
         const pal = [];
-        for (let color of palette) {
+        for (const color of palette) {
             const col = cloneColor(color);
             toNbitColor(col, bitsPerChannel);
             pal.push(col);
@@ -275,9 +304,9 @@ function sortPalettes(palettes, startIndex) {
         return palettes;
     }
     // paletteDist[i+1][j+1] stores distance between palette i and palette j
-    const paletteDist = zeros([numPalettes + 2, numPalettes + 2]);
+    const paletteDist = zeros2(numPalettes + 2, numPalettes + 2);
     // colorIndex[p1][p2][i] stores the index of the closest color in p2 from color index i in p1
-    const colorIndex = zeros([numPalettes, numPalettes, numColors]);
+    const colorIndex = zeros3(numPalettes, numPalettes, numColors);
     for (let i = 0; i < numPalettes; i++) {
         for (let j = 0; j < numPalettes; j++) {
             for (let k = 0; k < numColors; k++) {
@@ -289,7 +318,8 @@ function sortPalettes(palettes, startIndex) {
         for (let p2 = p1 + 1; p2 < numPalettes; p2++) {
             const index = colorIndex[p1][p2];
             for (let iteration = 0; iteration < pairIterations; iteration++) {
-                let i1 = startIndex + Math.floor(Math.random() * (numColors - startIndex - 1));
+                let i1 = startIndex +
+                    Math.floor(Math.random() * (numColors - startIndex - 1));
                 let i2 = i1 + 1 + Math.floor(Math.random() * (numColors - i1 - 1));
                 if (Math.random() < 0.5) {
                     [i1, i2] = [i2, i1];
@@ -347,7 +377,7 @@ function sortPalettes(palettes, startIndex) {
     for (let i = 0; i < numColors + 2; i++) {
         p1Index.push(i);
     }
-    const p1Dist = zeros([numColors + 2, numColors + 2]);
+    const p1Dist = zeros2(numColors + 2, numColors + 2);
     for (let i = 1; i <= numColors; i++) {
         for (let j = 1; j <= numColors; j++) {
             p1Dist[i][j] = colorDistance(pal1[i - 1], pal1[j - 1]);
@@ -368,7 +398,7 @@ function sortPalettes(palettes, startIndex) {
             }
         }
     }
-    const pIndex = zeros([numPalettes, numColors]);
+    const pIndex = zeros2(numPalettes, numColors);
     for (let i = 0; i < numColors; i++) {
         pIndex[0][i] = p1Index[i + 1] - 1;
     }
@@ -397,35 +427,43 @@ function sortPalettes(palettes, startIndex) {
                 const i2 = pIndex[i][index2];
                 const left2 = pIndex[i][index2 - 1];
                 const right2 = pIndex[i][index2 + 1];
-                let straightDist = upWeight * colorDistance(palettes[p2][i1], palettes[p1][up1]);
+                let straightDist = upWeight *
+                    colorDistance(palettes[p2][i1], palettes[p1][up1]);
                 if (left1 >= 0)
                     straightDist += colorDistance(palettes[p2][i1], palettes[p2][left1]);
                 if (right1 < numColors)
                     straightDist += colorDistance(palettes[p2][i1], palettes[p2][right1]);
-                straightDist += upWeight * colorDistance(palettes[p2][i2], palettes[p1][up2]);
+                straightDist +=
+                    upWeight *
+                        colorDistance(palettes[p2][i2], palettes[p1][up2]);
                 if (left2 >= 0)
                     straightDist += colorDistance(palettes[p2][i2], palettes[p2][left2]);
                 if (right2 < numColors)
                     straightDist += colorDistance(palettes[p2][i2], palettes[p2][right2]);
-                let swappedDist = upWeight * colorDistance(palettes[p2][i2], palettes[p1][up1]);
+                let swappedDist = upWeight *
+                    colorDistance(palettes[p2][i2], palettes[p1][up1]);
                 if (left1 >= 0)
                     swappedDist += colorDistance(palettes[p2][i2], palettes[p2][left1]);
                 if (right1 < numColors)
                     swappedDist += colorDistance(palettes[p2][i2], palettes[p2][right1]);
-                swappedDist += upWeight * colorDistance(palettes[p2][i1], palettes[p1][up2]);
+                swappedDist +=
+                    upWeight *
+                        colorDistance(palettes[p2][i1], palettes[p1][up2]);
                 if (left2 >= 0)
                     swappedDist += colorDistance(palettes[p2][i1], palettes[p2][left2]);
                 if (right2 < numColors)
                     swappedDist += colorDistance(palettes[p2][i1], palettes[p2][right2]);
                 if (swappedDist < straightDist) {
-                    [pIndex[i][index1], pIndex[i][index2]] = [pIndex[i][index2], pIndex[i][index1]];
+                    [pIndex[i][index1], pIndex[i][index2]] = [
+                        pIndex[i][index2],
+                        pIndex[i][index1],
+                    ];
                 }
                 iteration++;
             }
         }
     const pals = [];
     for (let i = 0; i < numPalettes; i++) {
-        const p1 = palIndex[i] - 1;
         const p2 = palIndex[i + 1] - 1;
         const pal = [];
         for (let j = 0; j < numColors; j++) {
@@ -435,17 +473,26 @@ function sortPalettes(palettes, startIndex) {
     }
     return pals;
 }
-function zeros(a) {
-    if (a.length > 0) {
-        const result = [];
-        for (let i = 0; i < a[0]; i++) {
-            result.push(zeros(a.slice(1)));
-        }
-        return result;
+function zeroArray(len) {
+    const result = [];
+    for (let i = 0; i < len; i++) {
+        result.push(0);
     }
-    else {
-        return 0;
+    return result;
+}
+function zeros2(len1, len2) {
+    const result = [];
+    for (let i = 0; i < len1; i++) {
+        result.push(zeroArray(len2));
     }
+    return result;
+}
+function zeros3(len1, len2, len3) {
+    const result = [];
+    for (let i = 0; i < len1; i++) {
+        result.push(zeros2(len2, len3));
+    }
+    return result;
 }
 function reverse(a, left, right) {
     const middle = (left + right) / 2.0;
@@ -481,55 +528,81 @@ function brightness(color) {
 }
 function replaceWeakestColors(palettes, tiles, minColorFactor, minPaletteFactor, replacePalettes) {
     const colorZeroBehaviour = quantizationOptions.colorZeroBehaviour;
-    const totalPaletteMse = [];
-    const removedPaletteMse = [];
-    for (let p of palettes) {
-        totalPaletteMse.push(0);
-        removedPaletteMse.push(0);
+    const useSlowDither = quantizationOptions.dither === Dither.Slow;
+    let closestPal = closestPaletteDistance;
+    if (useSlowDither) {
+        closestPal = closestPaletteDistanceDither;
     }
-    for (let tile of tiles) {
-        const [index, minDistance] = closestPalette(palettes, tile);
-        totalPaletteMse[index] += minDistance;
-        const remainingPalettes = [];
-        for (let i = 0; i < palettes.length; i++) {
-            if (i != index) {
-                remainingPalettes.push(palettes[i]);
+    const closestPaletteIndex = zeroArray(tiles.length);
+    let maxPaletteIndex = 0;
+    let minPaletteIndex = 0;
+    const totalPaletteMse = zeroArray(palettes.length);
+    const removedPaletteMse = zeroArray(palettes.length);
+    if (palettes.length > 1) {
+        for (let j = 0; j < tiles.length; j++) {
+            const tile = tiles[j];
+            let index = null;
+            let minDistance = null;
+            [index, minDistance] = closestPal(palettes, tile);
+            totalPaletteMse[index] += minDistance;
+            closestPaletteIndex[j] = index;
+            const remainingPalettes = [];
+            for (let i = 0; i < palettes.length; i++) {
+                if (i != index) {
+                    remainingPalettes.push(palettes[i]);
+                }
+            }
+            if (remainingPalettes.length > 0) {
+                const [, minDistance2] = closestPal(remainingPalettes, tile);
+                removedPaletteMse[index] += minDistance2;
             }
         }
-        if (remainingPalettes.length > 0) {
-            const [, minDistance2] = closestPalette(remainingPalettes, tile);
-            removedPaletteMse[index] += minDistance2;
-        }
+        maxPaletteIndex = maxIndex(totalPaletteMse);
+        minPaletteIndex = minIndex(removedPaletteMse);
     }
-    const maxPaletteIndex = maxIndex(totalPaletteMse);
-    const minPaletteIndex = minIndex(removedPaletteMse);
     const result = [];
-    if (palettes[0].length >= 2) {
+    if (palettes[0].length > 1) {
         const totalColorMse = [];
         const secondColorMse = [];
         for (let j = 0; j < palettes.length; j++) {
-            totalColorMse.push([]);
-            secondColorMse.push([]);
-            for (let i = 0; i < palettes[j].length; i++) {
-                totalColorMse[j].push(0);
-                secondColorMse[j].push(0);
-            }
+            totalColorMse.push(zeroArray(palettes[j].length));
+            secondColorMse.push(zeroArray(palettes[j].length));
         }
-        for (let tile of tiles) {
-            const [minPaletteIndex,] = closestPalette(palettes, tile);
+        for (let j = 0; j < tiles.length; j++) {
+            const tile = tiles[j];
+            const minPaletteIndex = closestPaletteIndex[j];
             const pal = palettes[minPaletteIndex];
-            for (let i = 0; i < tile.colors.length; i++) {
-                const color = tile.colors[i];
-                const [minColorIndex, minDist] = closestColor(pal, color);
-                totalColorMse[minPaletteIndex][minColorIndex] += minDist * tile.counts[i];
-                const remainingColors = [];
-                for (let i = 0; i < pal.length; i++) {
-                    if (i != minColorIndex) {
-                        remainingColors.push(pal[i]);
+            if (useSlowDither) {
+                for (const pixel of tile.pixels) {
+                    const [minColorIndex, minDist] = closestColorDither(pal, pixel);
+                    totalColorMse[minPaletteIndex][minColorIndex] += minDist;
+                    const remainingColors = [];
+                    for (let i = 0; i < pal.length; i++) {
+                        if (i != minColorIndex) {
+                            remainingColors.push(pal[i]);
+                        }
                     }
+                    const [, secondDist] = closestColorDither(remainingColors, pixel);
+                    secondColorMse[minPaletteIndex][minColorIndex] +=
+                        secondDist;
                 }
-                const [, secondDist] = closestColor(remainingColors, color);
-                secondColorMse[minPaletteIndex][minColorIndex] += secondDist * tile.counts[i];
+            }
+            else {
+                for (let i = 0; i < tile.colors.length; i++) {
+                    const color = tile.colors[i];
+                    const [minColorIndex, minDist] = closestColor(pal, color);
+                    totalColorMse[minPaletteIndex][minColorIndex] +=
+                        minDist * tile.counts[i];
+                    const remainingColors = [];
+                    for (let i = 0; i < pal.length; i++) {
+                        if (i != minColorIndex) {
+                            remainingColors.push(pal[i]);
+                        }
+                    }
+                    const [, secondDist] = closestColor(remainingColors, color);
+                    secondColorMse[minPaletteIndex][minColorIndex] +=
+                        secondDist * tile.counts[i];
+                }
             }
         }
         let sharedColorIndex = null;
@@ -537,13 +610,16 @@ function replaceWeakestColors(palettes, tiles, minColorFactor, minPaletteFactor,
             sharedColorIndex = 0;
         }
         for (let palIndex = 0; palIndex < palettes.length; palIndex++) {
-            let maxColorIndex = maxIndex(totalColorMse[palIndex]);
-            let minColorIndex = minIndex(secondColorMse[palIndex]);
-            const shouldReplaceMinColor = minColorIndex !== maxColorIndex && minColorIndex !== sharedColorIndex &&
-                secondColorMse[palIndex][minColorIndex] < minColorFactor * totalColorMse[palIndex][maxColorIndex];
+            const maxColorIndex = maxIndex(totalColorMse[palIndex]);
+            const minColorIndex = minIndex(secondColorMse[palIndex]);
+            const shouldReplaceMinColor = minColorIndex !== maxColorIndex &&
+                minColorIndex !== sharedColorIndex &&
+                secondColorMse[palIndex][minColorIndex] <
+                    minColorFactor * totalColorMse[palIndex][maxColorIndex];
             const colors = [];
             for (let i = 0; i < palettes[palIndex].length; i++) {
                 if (i == minColorIndex && shouldReplaceMinColor) {
+                    console.log("replaced color in palette " + palIndex);
                     colors.push(cloneColor(palettes[palIndex][maxColorIndex]));
                 }
                 else {
@@ -562,14 +638,15 @@ function replaceWeakestColors(palettes, tiles, minColorFactor, minPaletteFactor,
             result.push(colors);
         }
     }
-    if (replacePalettes && (minPaletteIndex != maxPaletteIndex) && (removedPaletteMse[minPaletteIndex] < minPaletteFactor * totalPaletteMse[maxPaletteIndex])) {
+    if (replacePalettes &&
+        minPaletteIndex != maxPaletteIndex &&
+        removedPaletteMse[minPaletteIndex] <
+            minPaletteFactor * totalPaletteMse[maxPaletteIndex]) {
+        console.log("replaced palette " + minPaletteIndex);
         while (result[minPaletteIndex].length > 0)
             result[minPaletteIndex].pop();
-        for (let color of result[maxPaletteIndex]) {
-            const c = Array();
-            for (let v of color) {
-                c.push(v);
-            }
+        for (const color of result[maxPaletteIndex]) {
+            const c = structuredClone(color);
             result[minPaletteIndex].push(c);
         }
     }
@@ -590,13 +667,23 @@ function kMeans(palettes, tiles) {
         sumColors.push(colors);
     }
     for (const tile of tiles) {
-        const [palIndex,] = closestPalette(palettes, tile);
-        for (let i = 0; i < tile.colors.length; i++) {
-            const [colIndex,] = closestColor(palettes[palIndex], tile.colors[i]);
-            counts[palIndex][colIndex] += tile.counts[i];
-            const color = cloneColor(tile.colors[i]);
-            scaleColor(color, tile.counts[i]);
-            addColor(sumColors[palIndex][colIndex], color);
+        if (quantizationOptions.dither === Dither.Slow) {
+            const palIndex = closestPaletteDither(palettes, tile);
+            for (const pixel of tile.pixels) {
+                const [colIndex, ,] = closestColorDither(palettes[palIndex], pixel);
+                counts[palIndex][colIndex] += 1;
+                addColor(sumColors[palIndex][colIndex], pixel.color);
+            }
+        }
+        else {
+            const palIndex = closestPalette(palettes, tile);
+            for (let i = 0; i < tile.colors.length; i++) {
+                const [colIndex] = closestColor(palettes[palIndex], tile.colors[i]);
+                counts[palIndex][colIndex] += tile.counts[i];
+                const color = cloneColor(tile.colors[i]);
+                scaleColor(color, tile.counts[i]);
+                addColor(sumColors[palIndex][colIndex], color);
+            }
         }
     }
     let sharedColorIndex = null;
@@ -605,7 +692,7 @@ function kMeans(palettes, tiles) {
     }
     for (let i = 0; i < sumColors.length; i++) {
         for (let j = 0; j < sumColors[i].length; j++) {
-            if (counts[i][j] == 0 || (j === sharedColorIndex)) {
+            if (counts[i][j] == 0 || j === sharedColorIndex) {
                 sumColors[i][j] = cloneColor(palettes[i][j]);
             }
             else {
@@ -619,7 +706,7 @@ function meanSquareError(palettes, tiles) {
     let totalDistance = 0;
     let count = 0;
     for (const tile of tiles) {
-        const [palIndex,] = closestPalette(palettes, tile);
+        const palIndex = closestPalette(palettes, tile);
         for (let i = 0; i < tile.colors.length; i++) {
             const [, minDistance] = closestColor(palettes[palIndex], tile.colors[i]);
             totalDistance += minDistance * tile.counts[i];
@@ -632,7 +719,7 @@ function meanSquareErrorDither(palettes, tiles) {
     let totalDistance = 0;
     let count = 0;
     for (const tile of tiles) {
-        const [palIndex,] = closestPaletteDither(palettes, tile);
+        const palIndex = closestPaletteDither(palettes, tile);
         for (const pixel of tile.pixels) {
             const [, minDistance] = closestColorDither(palettes[palIndex], pixel);
             totalDistance += minDistance;
@@ -683,9 +770,9 @@ function closestColorDither(palette, pixel) {
     const linearPixel = cloneColor(pixel.color);
     toLinearColor(linearPixel);
     const candidates = [];
-    let c = [0, 0, 0];
-    let err = [0, 0, 0];
-    let reducedColor = [0, 0, 0];
+    const c = [0, 0, 0];
+    const err = [0, 0, 0];
+    const reducedColor = [0, 0, 0];
     for (let i = 0; i < ditherPixels; i++) {
         copyColor(c, linearPixel);
         copyColor(err, error);
@@ -695,7 +782,12 @@ function closestColorDither(palette, pixel) {
         toSrgbColor(c);
         const [minColorIndex, minDist] = closestColor(palette, c);
         const minColor = palette[minColorIndex];
-        candidates.push({ colorIndex: minColorIndex, colorDistance: minDist, comparedColor: c, brightness: brightness(minColor) });
+        candidates.push({
+            colorIndex: minColorIndex,
+            colorDistance: minDist,
+            comparedColor: c,
+            brightness: brightness(minColor),
+        });
         copyColor(reducedColor, minColor);
         toNbitColor(reducedColor, quantizationOptions.bitsPerChannel);
         toLinearColor(reducedColor);
@@ -710,12 +802,14 @@ function closestColorDither(palette, pixel) {
         }
     }
     const index = ditherPattern[pixel.x & 1][pixel.y & 1];
-    return [candidates[index].colorIndex, candidates[index].colorDistance, candidates[index].comparedColor];
+    return [
+        candidates[index].colorIndex,
+        candidates[index].colorDistance,
+        candidates[index].comparedColor,
+    ];
 }
 function colorDistance(a, b) {
-    return (2 * Math.pow((a[0] - b[0]), 2) +
-        4 * Math.pow((a[1] - b[1]), 2) +
-        Math.pow((a[2] - b[2]), 2));
+    return 2 * Math.pow((a[0] - b[0]), 2) + 4 * Math.pow((a[1] - b[1]), 2) + Math.pow((a[2] - b[2]), 2);
 }
 function paletteDistance(palette, tile) {
     let sum = 0;
@@ -729,13 +823,27 @@ function paletteDistance(palette, tile) {
 }
 function paletteDistanceDither(palette, tile) {
     let sum = 0;
-    for (let pixel of tile.pixels) {
-        const [, minDist,] = closestColorDither(palette, pixel);
+    for (const pixel of tile.pixels) {
+        const [, minDist] = closestColorDither(palette, pixel);
         sum += minDist;
     }
     return sum;
 }
 function closestPalette(palettes, tile) {
+    let minIndex = 0;
+    if (palettes.length > 1) {
+        let minDist = paletteDistance(palettes[minIndex], tile);
+        for (let i = 1; i < palettes.length; i++) {
+            const dist = paletteDistance(palettes[i], tile);
+            if (dist < minDist) {
+                minIndex = i;
+                minDist = dist;
+            }
+        }
+    }
+    return minIndex;
+}
+function closestPaletteDistance(palettes, tile) {
     let minIndex = 0;
     let minDist = paletteDistance(palettes[minIndex], tile);
     for (let i = 1; i < palettes.length; i++) {
@@ -749,6 +857,20 @@ function closestPalette(palettes, tile) {
 }
 function closestPaletteDither(palettes, tile) {
     let minIndex = 0;
+    if (palettes.length > 1) {
+        let minDist = paletteDistanceDither(palettes[minIndex], tile);
+        for (let i = 1; i < palettes.length; i++) {
+            const dist = paletteDistanceDither(palettes[i], tile);
+            if (dist < minDist) {
+                minIndex = i;
+                minDist = dist;
+            }
+        }
+    }
+    return minIndex;
+}
+function closestPaletteDistanceDither(palettes, tile) {
+    let minIndex = 0;
     let minDist = paletteDistanceDither(palettes[minIndex], tile);
     for (let i = 1; i < palettes.length; i++) {
         const dist = paletteDistanceDither(palettes[i], tile);
@@ -761,7 +883,11 @@ function closestPaletteDither(palettes, tile) {
 }
 function getColor(image, x, y) {
     const index = 4 * (x + image.width * y);
-    const color = [image.data[index], image.data[index + 1], image.data[index + 2]];
+    const color = [
+        image.data[index],
+        image.data[index + 1],
+        image.data[index + 2],
+    ];
     return color;
 }
 function extractTile(image, startX, startY) {
@@ -780,11 +906,13 @@ function extractTile(image, startX, startY) {
             const index = 4 * (x + image.width * y);
             const color = getColor(image, x, y);
             // skip transparent pixels
-            if (colorZeroBehaviour === ColorZeroBehaviour.TransparentFromTransparent
-                && image.data[index + 3] < 255)
+            if (colorZeroBehaviour ===
+                ColorZeroBehaviour.TransparentFromTransparent &&
+                image.data[index + 3] < 255)
                 continue;
-            if (colorZeroBehaviour === ColorZeroBehaviour.TransparentFromColor
-                && equalColors(color, quantizationOptions.colorZeroValue))
+            if (colorZeroBehaviour ===
+                ColorZeroBehaviour.TransparentFromColor &&
+                equalColors(color, quantizationOptions.colorZeroValue))
                 continue;
             tile.pixels.push({ tile: tile, color: color, x: x, y: y });
             let colorIndex = 0;
@@ -835,7 +963,7 @@ function equalColors(c1, c2) {
 function extractPixels(tiles) {
     const pixels = [];
     for (const tile of tiles) {
-        for (let pix of tile.pixels) {
+        for (const pix of tile.pixels) {
             pixels.push({
                 tile: tile,
                 color: pix.color,
@@ -851,57 +979,110 @@ function quantizeTiles(palettes, image, useDither) {
     const tileHeight = quantizationOptions.tileHeight;
     const bitsPerChannel = quantizationOptions.bitsPerChannel;
     const colorZeroBehaviour = quantizationOptions.colorZeroBehaviour;
+    const numPalettes = quantizationOptions.numPalettes;
+    const colorsPerPalette = quantizationOptions.colorsPerPalette;
+    const imageIsReduced = quantizationOptions.dither !== Dither.Off;
+    let adjustedIndex = 0;
+    if (colorZeroBehaviour === ColorZeroBehaviour.TransparentFromColor ||
+        colorZeroBehaviour === ColorZeroBehaviour.TransparentFromTransparent) {
+        adjustedIndex = 1;
+    }
     const reducedPalettes = structuredClone(palettes);
-    for (let pal of reducedPalettes) {
-        for (let color of pal) {
+    for (const pal of reducedPalettes) {
+        for (const color of pal) {
             toNbitColor(color, bitsPerChannel);
         }
     }
+    const transparentColor = cloneColor(quantizationOptions.colorZeroValue);
+    if (imageIsReduced)
+        toNbitColor(transparentColor, bitsPerChannel);
+    const colorZero = cloneColor(quantizationOptions.colorZeroValue);
+    toNbitColor(colorZero, bitsPerChannel);
+    const bmpWidth = Math.ceil(image.width / 4) * 4;
     const quantizedImage = {
         width: image.width,
         height: image.height,
         data: new Uint8ClampedArray(image.data.length),
+        totalPaletteColors: numPalettes * colorsPerPalette,
+        paletteData: new Uint8ClampedArray(1024),
+        colorIndexes: new Uint8ClampedArray(bmpWidth * image.height),
     };
+    if (numPalettes * colorsPerPalette <= 256) {
+        let i = 0;
+        for (const pal of reducedPalettes) {
+            if (adjustedIndex === 1) {
+                quantizedImage.paletteData[i] = colorZero[2];
+                quantizedImage.paletteData[i + 1] = colorZero[1];
+                quantizedImage.paletteData[i + 2] = colorZero[0];
+                i += 4;
+            }
+            for (const color of pal) {
+                quantizedImage.paletteData[i] = color[2];
+                quantizedImage.paletteData[i + 1] = color[1];
+                quantizedImage.paletteData[i + 2] = color[0];
+                i += 4;
+            }
+        }
+    }
     for (let startY = 0; startY < image.height; startY += tileHeight) {
         for (let startX = 0; startX < image.width; startX += tileWidth) {
             const tile = extractTile(image, startX, startY);
-            let palette = null;
+            let palette = reducedPalettes[0];
+            let closestPaletteIndex = 0;
             if (tile.colors.length > 0) {
-                let paletteIndex = null;
                 if (useDither) {
-                    [paletteIndex,] = closestPaletteDither(reducedPalettes, tile);
+                    closestPaletteIndex = closestPaletteDither(reducedPalettes, tile);
                 }
                 else {
-                    [paletteIndex,] = closestPalette(reducedPalettes, tile);
+                    closestPaletteIndex = closestPalette(reducedPalettes, tile);
                 }
-                palette = reducedPalettes[paletteIndex];
+                palette = reducedPalettes[closestPaletteIndex];
             }
             const endX = Math.min(startX + tileWidth, image.width);
             const endY = Math.min(startY + tileHeight, image.height);
             for (let y = startY; y < endY; y++) {
                 for (let x = startX; x < endX; x++) {
                     const index = 4 * (x + image.width * y);
-                    const color = [image.data[index], image.data[index + 1], image.data[index + 2]];
-                    if ((colorZeroBehaviour === ColorZeroBehaviour.TransparentFromTransparent && image.data[index + 3] < 255)
-                        || (colorZeroBehaviour === ColorZeroBehaviour.TransparentFromColor && equalColors(color, quantizationOptions.colorZeroValue))) {
+                    const bmpIndex = x + bmpWidth * (image.height - 1 - y);
+                    const color = [
+                        image.data[index],
+                        image.data[index + 1],
+                        image.data[index + 2],
+                    ];
+                    if ((colorZeroBehaviour ===
+                        ColorZeroBehaviour.TransparentFromTransparent &&
+                        image.data[index + 3] < 255) ||
+                        (colorZeroBehaviour ===
+                            ColorZeroBehaviour.TransparentFromColor &&
+                            equalColors(color, transparentColor))) {
                         quantizedImage.data[index + 0] = image.data[index + 0];
                         quantizedImage.data[index + 1] = image.data[index + 1];
                         quantizedImage.data[index + 2] = image.data[index + 2];
                         quantizedImage.data[index + 3] = image.data[index + 3];
+                        quantizedImage.colorIndexes[bmpIndex] =
+                            closestPaletteIndex * colorsPerPalette;
                     }
                     else {
-                        let colorIndex = null;
+                        let closestColorIndex = 0;
                         if (useDither) {
-                            [colorIndex,] = closestColorDither(palette, { color: color, x: x, y: y });
+                            [closestColorIndex] = closestColorDither(palette, {
+                                color: color,
+                                x: x,
+                                y: y,
+                            });
                         }
                         else {
-                            [colorIndex,] = closestColor(palette, color);
+                            [closestColorIndex] = closestColor(palette, color);
                         }
-                        const paletteColor = cloneColor(palette[colorIndex]);
+                        const paletteColor = cloneColor(palette[closestColorIndex]);
                         quantizedImage.data[index + 0] = paletteColor[0];
                         quantizedImage.data[index + 1] = paletteColor[1];
                         quantizedImage.data[index + 2] = paletteColor[2];
                         quantizedImage.data[index + 3] = 255;
+                        quantizedImage.colorIndexes[bmpIndex] =
+                            closestPaletteIndex * colorsPerPalette +
+                                closestColorIndex +
+                                adjustedIndex;
                     }
                 }
             }
@@ -912,13 +1093,14 @@ function quantizeTiles(palettes, image, useDither) {
 function colorQuantize1(pixels, randomShuffle) {
     let iterations = quantizationOptions.fractionOfPixels * pixels.length;
     if (quantizationOptions.dither === Dither.Slow) {
-        iterations /= 10;
+        iterations /= 5;
     }
     const errorStartIteration = iterations * 0.5;
     const alpha = 0.3;
     const colorZeroBehaviour = quantizationOptions.colorZeroBehaviour;
     let colorsPerPalette = quantizationOptions.colorsPerPalette;
-    if (colorZeroBehaviour === ColorZeroBehaviour.TransparentFromColor || colorZeroBehaviour === ColorZeroBehaviour.TransparentFromTransparent) {
+    if (colorZeroBehaviour === ColorZeroBehaviour.TransparentFromColor ||
+        colorZeroBehaviour === ColorZeroBehaviour.TransparentFromTransparent) {
         colorsPerPalette -= 1;
     }
     // find average color
@@ -934,7 +1116,8 @@ function colorQuantize1(pixels, randomShuffle) {
     const colors = [avgColor];
     let splitIndex = 0;
     for (let numColors = 2; numColors <= colorsPerPalette; numColors++) {
-        if (numColors === 2 && colorZeroBehaviour === ColorZeroBehaviour.Shared) {
+        if (numColors === 2 &&
+            colorZeroBehaviour === ColorZeroBehaviour.Shared) {
             colors[0] = cloneColor(quantizationOptions.colorZeroValue);
             colors.push(avgColor);
         }
@@ -951,7 +1134,8 @@ function colorQuantize1(pixels, randomShuffle) {
             let minColorDistance = null;
             let targetColor = null;
             if (quantizationOptions.dither === Dither.Slow) {
-                [minColorIndex, minColorDistance, targetColor] = closestColorDither(colors, nextPixel);
+                [minColorIndex, minColorDistance, targetColor] =
+                    closestColorDither(colors, nextPixel);
             }
             else {
                 [minColorIndex, minColorDistance] = closestColor(colors, nextPixel.color);
@@ -1039,3 +1223,4 @@ function minIndex(values) {
     }
     return minI;
 }
+//# sourceMappingURL=worker.js.map
