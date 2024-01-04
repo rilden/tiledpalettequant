@@ -185,17 +185,25 @@ function quantizeImage(image) {
     if (quantizationOptions.dither != Dither.Off) {
         prog[3] = 94;
     }
-    let palettes = colorQuantize1Color(tiles, pixels, randomShuffle);
-    updateProgress(prog[0] / quantizationOptions.numPalettes);
-    updatePalettes(palettes, false);
-    if (showProgress)
-        updateQuantizedImage(quantizeTiles(palettes, reducedImageData, false));
-    for (let numColors = 2; numColors <= quantizationOptions.colorsPerPalette; numColors++) {
-        expandPalettesByOneColor(palettes, tiles, pixels, randomShuffle);
-        updateProgress((prog[0] * numColors) / quantizationOptions.colorsPerPalette);
+    let palettes;
+    if (quantizationOptions.numPalettes > 1) {
+        palettes = colorQuantize1Color(tiles, pixels, randomShuffle);
+        updateProgress(prog[0] / quantizationOptions.numPalettes);
         updatePalettes(palettes, false);
         if (showProgress)
             updateQuantizedImage(quantizeTiles(palettes, reducedImageData, false));
+        for (let numColors = 2; numColors <= quantizationOptions.colorsPerPalette; numColors++) {
+            expandPalettesByOneColor(palettes, tiles, pixels, randomShuffle);
+            updateProgress((prog[0] * numColors) / quantizationOptions.colorsPerPalette);
+            updatePalettes(palettes, false);
+            if (showProgress)
+                updateQuantizedImage(quantizeTiles(palettes, reducedImageData, false));
+        }
+    }
+    else {
+        palettes = [
+            colorQuantize1Palette(pixels, randomShuffle, quantizationOptions.colorsPerPalette),
+        ];
     }
     let minMse = meanSquareErr(palettes, tiles);
     let minPalettes = structuredClone(palettes);
