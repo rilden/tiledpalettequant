@@ -7,14 +7,39 @@ const numPalettesInput = document.getElementById("palette_num");
 const colorsPerPaletteInput = document.getElementById("colors_per_palette");
 const bitsPerChannelInput = document.getElementById("bits_per_channel");
 const fractionOfPixelsInput = document.getElementById("fraction_of_pixels");
-const numberInputs = [
-    tileWidthInput,
-    tileHeightInput,
-    numPalettesInput,
-    colorsPerPaletteInput,
-    bitsPerChannelInput,
+const integerInputs = [
+    [tileWidthInput, 8],
+    [tileHeightInput, 8],
+    [numPalettesInput, 8],
+    [colorsPerPaletteInput, 4],
+    [bitsPerChannelInput, 5],
 ];
-const defaultNumberInputs = [8, 8, 8, 4, 5];
+function validateIntegerInput(numberInput) {
+    const [inputElement, defaultValue] = numberInput;
+    let num = parseInt(inputElement.value, radix);
+    if (isNaN(num))
+        num = defaultValue;
+    const min = parseInt(inputElement.min, radix);
+    const max = parseInt(inputElement.max, radix);
+    if (num < min)
+        num = min;
+    if (num > max)
+        num = max;
+    inputElement.value = num.toString();
+}
+function validateFloatInput(numberInput) {
+    const [inputElement, defaultValue] = numberInput;
+    let num = parseFloat(inputElement.value);
+    if (isNaN(num))
+        num = defaultValue;
+    const min = parseFloat(inputElement.min);
+    const max = parseFloat(inputElement.max);
+    if (num < min)
+        num = min;
+    if (num > max)
+        num = max;
+    inputElement.value = num.toFixed(2);
+}
 const uniqueInput = document.getElementById("unique");
 const sharedInput = document.getElementById("shared");
 const transparentFromTransparentInput = document.getElementById("transparent_from_transparent");
@@ -31,11 +56,13 @@ const indexZeroValues = [
     ColorZeroBehaviour.TransparentFromTransparent,
     ColorZeroBehaviour.TransparentFromColor,
 ];
-const colorZeroStrings = ["u", "s", "t", "tc"];
+const colorZeroAbbreviations = ["u", "s", "t", "tc"];
 const sharedColorInput = document.getElementById("shared_color");
 const transparentColorInput = document.getElementById("transparent_color");
+const defaultColorInput = document.createElement("input");
+defaultColorInput.value = "#000000";
 const colorValues = [
-    null,
+    defaultColorInput,
     sharedColorInput,
     transparentColorInput,
     transparentColorInput,
@@ -68,9 +95,6 @@ const ditherPatternValues = [
     DitherPattern.Horizontal2,
     DitherPattern.Vertical2,
 ];
-const quantizeButton = document.getElementById("quantizeButton");
-const progress = document.getElementById("progress");
-const quantizedImages = document.getElementById("quantized_images");
 let sourceImageName = "carina";
 let sourceImage = document.getElementById("source_img");
 body.addEventListener("dragover", (event) => {
@@ -107,6 +131,10 @@ let palettesImageDownload = document.createElement("a");
 let quantizedImage = document.createElement("canvas");
 let palettesImage = document.createElement("canvas");
 let worker = null;
+const quantizeButton = document.getElementById("quantizeButton");
+const quantizedImages = document.getElementById("quantized_images");
+const progress = document.getElementById("progress");
+const radix = 10;
 quantizeButton.addEventListener("click", () => {
     sourceImage = document.getElementById("source_img");
     if (!inProgress) {
@@ -130,62 +158,16 @@ quantizeButton.addEventListener("click", () => {
         div.appendChild(palettesImageDownload);
         quantizedImages.prepend(div);
     }
-    const radix = 10;
-    for (let i = 0; i < numberInputs.length; i++) {
-        const numberInput = numberInputs[i];
-        let num = parseInt(numberInput.value, radix);
-        if (isNaN(num))
-            num = defaultNumberInputs[i];
-        const min = parseInt(numberInput.min, radix);
-        const max = parseInt(numberInput.max, radix);
-        if (num < min)
-            num = min;
-        if (num > max)
-            num = max;
-        numberInput.value = num.toString();
-    }
-    let pixelFraction = parseFloat(fractionOfPixelsInput.value);
-    if (isNaN(pixelFraction)) {
-        pixelFraction = 0.1;
-        fractionOfPixelsInput.value = "0.1";
-    }
-    let colorZeroBehaviour = ColorZeroBehaviour.Unique;
-    let colorZeroValue = [0, 0, 0];
-    let colorZeroStr = "";
-    for (let i = 0; i < indexZeroButtons.length; i++) {
-        if (indexZeroButtons[i].checked) {
-            colorZeroBehaviour = indexZeroValues[i];
-            colorZeroStr = colorZeroStrings[i];
-            const cvi = colorValues[i];
-            if (cvi !== null) {
-                const colorStr = cvi.value;
-                colorZeroValue = [
-                    parseInt(colorStr.slice(1, 3), 16),
-                    parseInt(colorStr.slice(3, 5), 16),
-                    parseInt(colorStr.slice(5, 7), 16),
-                ];
-            }
-            break;
-        }
-    }
-    let dither = Dither.Off;
-    for (let i = 0; i < ditherButtons.length; i++) {
-        if (ditherButtons[i].checked) {
-            dither = ditherValues[i];
-        }
-    }
-    let ditherWeight = parseFloat(ditherWeightInput.value);
-    if (isNaN(ditherWeight)) {
-        ditherWeight = 0.5;
-        ditherWeightInput.value = "0.5";
-    }
-    let ditherPattern = DitherPattern.Diagonal4;
-    for (let i = 0; i < ditherPatternButtons.length; i++) {
-        if (ditherPatternButtons[i].checked) {
-            ditherPattern = ditherPatternValues[i];
-        }
-    }
-    const settingsStr = `-${tileWidthInput.value}x${tileHeightInput.value}-${numPalettesInput.value}p${colorsPerPaletteInput.value}c-${colorZeroStr}`;
+    integerInputs.forEach(validateIntegerInput);
+    validateFloatInput([fractionOfPixelsInput, 0.1]);
+    validateFloatInput([ditherWeightInput, 0.5]);
+    const colorZeroBehaviour = selectedValue(indexZeroButtons, indexZeroValues);
+    const colorInput = selectedValue(indexZeroButtons, colorValues);
+    const colorZeroValue = hexToColor(colorInput.value);
+    const ditherMethod = selectedValue(ditherButtons, ditherValues);
+    const ditherPattern = selectedValue(ditherPatternButtons, ditherPatternValues);
+    const colorZeroAbbreviation = selectedValue(indexZeroButtons, colorZeroAbbreviations);
+    const settingsStr = `-${tileWidthInput.value}x${tileHeightInput.value}-${numPalettesInput.value}p${colorsPerPaletteInput.value}c-${colorZeroAbbreviation}`;
     const totalPaletteColors = parseInt(numPalettesInput.value, radix) *
         parseInt(colorsPerPaletteInput.value, radix);
     if (totalPaletteColors > 256) {
@@ -254,15 +236,30 @@ quantizeButton.addEventListener("click", () => {
             numPalettes: parseInt(numPalettesInput.value, radix),
             colorsPerPalette: parseInt(colorsPerPaletteInput.value, radix),
             bitsPerChannel: parseInt(bitsPerChannelInput.value, radix),
-            fractionOfPixels: pixelFraction,
+            fractionOfPixels: parseFloat(fractionOfPixelsInput.value),
             colorZeroBehaviour: colorZeroBehaviour,
             colorZeroValue: colorZeroValue,
-            dither: dither,
-            ditherWeight: ditherWeight,
+            dither: ditherMethod,
+            ditherWeight: parseFloat(ditherWeightInput.value),
             ditherPattern: ditherPattern,
         },
     });
 });
+function hexToColor(colorStr) {
+    return [
+        parseInt(colorStr.slice(1, 3), 16),
+        parseInt(colorStr.slice(3, 5), 16),
+        parseInt(colorStr.slice(5, 7), 16),
+    ];
+}
+function selectedValue(radioInputs, values) {
+    for (let i = 0; i < radioInputs.length; i++) {
+        if (radioInputs[i].checked) {
+            return values[i];
+        }
+    }
+    throw "No radio inputs selected";
+}
 function imageDataFrom(img) {
     const canvas = document.createElement("canvas");
     const context = canvas.getContext("2d");
