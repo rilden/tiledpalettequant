@@ -118,13 +118,13 @@ function updatePalettes(palettes, doSorting) {
     });
 }
 function movePalettesCloser(palettes, pixel, alpha) {
-    let sharedColorIndex = null;
+    let sharedColorIndex = -1;
     if (quantizationOptions.colorZeroBehaviour === ColorZeroBehaviour.Shared) {
         sharedColorIndex = 0;
     }
-    let closestPaletteIndex = null;
-    let closestColorIndex = null;
-    let targetColor = null;
+    let closestPaletteIndex = -1;
+    let closestColorIndex = -1;
+    let targetColor;
     if (quantizationOptions.dither === Dither.Slow) {
         closestPaletteIndex = getClosestPaletteIndexDither(palettes, pixel.tile);
         [closestColorIndex, , targetColor] = getClosestColorDither(palettes[closestPaletteIndex], pixel);
@@ -185,25 +185,28 @@ function quantizeImage(image) {
     if (quantizationOptions.dither != Dither.Off) {
         prog[3] = 94;
     }
-    let palettes;
-    if (quantizationOptions.numPalettes > 1) {
-        palettes = colorQuantize1Color(tiles, pixels, randomShuffle);
-        updateProgress(prog[0] / quantizationOptions.numPalettes);
+    let palettes = colorQuantize1Color(tiles, pixels, randomShuffle);
+    let startIndex = 2;
+    if (quantizationOptions.colorZeroBehaviour === ColorZeroBehaviour.Shared) {
+        startIndex += 1;
+    }
+    let endIndex = quantizationOptions.colorsPerPalette;
+    if (quantizationOptions.colorZeroBehaviour ===
+        ColorZeroBehaviour.TransparentFromColor ||
+        quantizationOptions.colorZeroBehaviour ===
+            ColorZeroBehaviour.TransparentFromTransparent) {
+        endIndex -= 1;
+    }
+    updateProgress(prog[0] / quantizationOptions.numPalettes);
+    updatePalettes(palettes, false);
+    if (showProgress)
+        updateQuantizedImage(quantizeTiles(palettes, reducedImageData, false));
+    for (let numColors = startIndex; numColors <= endIndex; numColors++) {
+        expandPalettesByOneColor(palettes, tiles, pixels, randomShuffle);
+        updateProgress((prog[0] * numColors) / quantizationOptions.colorsPerPalette);
         updatePalettes(palettes, false);
         if (showProgress)
             updateQuantizedImage(quantizeTiles(palettes, reducedImageData, false));
-        for (let numColors = 2; numColors <= quantizationOptions.colorsPerPalette; numColors++) {
-            expandPalettesByOneColor(palettes, tiles, pixels, randomShuffle);
-            updateProgress((prog[0] * numColors) / quantizationOptions.colorsPerPalette);
-            updatePalettes(palettes, false);
-            if (showProgress)
-                updateQuantizedImage(quantizeTiles(palettes, reducedImageData, false));
-        }
-    }
-    else {
-        palettes = [
-            colorQuantize1Palette(pixels, randomShuffle, quantizationOptions.colorsPerPalette),
-        ];
     }
     let minMse = meanSquareErr(palettes, tiles);
     let minPalettes = structuredClone(palettes);
@@ -526,9 +529,7 @@ function replaceWeakestColors(palettes, tiles, minColorFactor, minPaletteFactor,
     if (palettes.length > 1) {
         for (let j = 0; j < tiles.length; j++) {
             const tile = tiles[j];
-            let index = null;
-            let minDistance = null;
-            [index, minDistance] = closestPal(palettes, tile);
+            const [index, minDistance] = closestPal(palettes, tile);
             totalPaletteMse[index] += minDistance;
             closestPaletteIndex[j] = index;
             const remainingPalettes = [];
@@ -590,7 +591,7 @@ function replaceWeakestColors(palettes, tiles, minColorFactor, minPaletteFactor,
                 }
             }
         }
-        let sharedColorIndex = null;
+        let sharedColorIndex = -1;
         if (colorZeroBehaviour === ColorZeroBehaviour.Shared) {
             sharedColorIndex = 0;
         }
@@ -671,7 +672,7 @@ function kMeans(palettes, tiles) {
             }
         }
     }
-    let sharedColorIndex = null;
+    let sharedColorIndex = -1;
     if (colorZeroBehaviour === ColorZeroBehaviour.Shared) {
         sharedColorIndex = 0;
     }
@@ -1047,6 +1048,10 @@ function colorQuantize1Color(tiles, pixels, randomShuffle) {
     }
     scaleColor(avgColor, 1.0 / pixels.length);
     const palettes = [[avgColor]];
+    if (quantizationOptions.colorZeroBehaviour === ColorZeroBehaviour.Shared) {
+        palettes[0].push(avgColor);
+        palettes[0][0] = structuredClone(quantizationOptions.colorZeroValue);
+    }
     let splitIndex = 0;
     for (let numPalettes = 2; numPalettes <= quantizationOptions.numPalettes; numPalettes++) {
         palettes.push(structuredClone(palettes[splitIndex]));
@@ -1096,15 +1101,7 @@ function expandPalettesByOneColor(palettes, tiles, pixels, randomShuffle) {
     for (let i = 0; i < palettes.length; i++) {
         const colors = palettes[i];
         const splitIndex = splitIndexes[i];
-        if (numColors === 2 &&
-            quantizationOptions.colorZeroBehaviour === ColorZeroBehaviour.Shared) {
-            const tmpColor = cloneColor(colors[0]);
-            colors[0] = cloneColor(quantizationOptions.colorZeroValue);
-            colors.push(tmpColor);
-        }
-        else {
-            colors.push(cloneColor(colors[splitIndex]));
-        }
+        colors.push(cloneColor(colors[splitIndex]));
     }
     for (let iteration = 0; iteration < iterations; iteration++) {
         const nextPixel = pixels[randomShuffle.next()];
@@ -1129,7 +1126,7 @@ function colorQuantize1Palette(pixels, randomShuffle, colorsPerPalette) {
         addColor(avgColor, pixel.color);
     }
     scaleColor(avgColor, 1.0 / pixels.length);
-    let sharedColorIndex = null;
+    let sharedColorIndex = -1;
     if (colorZeroBehaviour === ColorZeroBehaviour.Shared) {
         sharedColorIndex = 0;
     }
@@ -1150,9 +1147,9 @@ function colorQuantize1Palette(pixels, randomShuffle, colorsPerPalette) {
         }
         for (let iteration = 0; iteration < iterations; iteration++) {
             const nextPixel = pixels[randomShuffle.next()];
-            let minColorIndex = null;
-            let minColorDistance = null;
-            let targetColor = null;
+            let minColorIndex = -1;
+            let minColorDistance = -1;
+            let targetColor;
             if (quantizationOptions.dither === Dither.Slow) {
                 [minColorIndex, minColorDistance, targetColor] =
                     getClosestColorDither(colors, nextPixel);
